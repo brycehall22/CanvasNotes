@@ -62,7 +62,6 @@ export function MiniMap({ hostRef }: { hostRef: React.RefObject<HTMLDivElement> 
     ctx.clearRect(0, 0, W, H);
     const style = getComputedStyle(document.documentElement);
     const bg = style.getPropertyValue('--nx-surface-raised').trim() || '#1a1a1a';
-    const dot = style.getPropertyValue('--nx-border').trim() || '#444';
     const accent = style.getPropertyValue('--nx-accent').trim() || '#6b9';
     const nodeFill = style.getPropertyValue('--nx-text-tertiary').trim() || '#888';
 

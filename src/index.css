@@ -189,8 +189,6 @@ body {
   font-size: 14px;
   line-height: 1.55;
   overscroll-behavior: none;
-  /* CRITICAL: prevent browser native gestures from stealing pointer events */
-  touch-action: none;
 }
 
 button {

@@ -12,15 +12,24 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [now, setNow] = useState(() => Date.now());
   const navigate = useNavigate();
 
   const refresh = async () => {
-    setLoading(true);
     setBoards(await listBoards());
-    setLoading(false);
+    setNow(Date.now());
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    listBoards().then((b) => {
+      if (cancelled) return;
+      setBoards(b);
+      setNow(Date.now());
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleCreate = async () => {
     const board = await createBoard(`Untitled board ${boards.length + 1}`);
@@ -46,19 +55,17 @@ export function Dashboard() {
     refresh();
   };
 
-  const formatDate = (ts: number) => {
-    const d = new Date(ts);
-    const now = Date.now();
-    const diff = now - ts;
-    const min = 60 * 1000;
-    const hr = 60 * min;
-    const day = 24 * hr;
-    if (diff < min) return 'Just now';
-    if (diff < hr) return `${Math.floor(diff / min)}m ago`;
-    if (diff < day) return `${Math.floor(diff / hr)}h ago`;
-    if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
-    return d.toLocaleDateString();
-  };
+function formatDate(ts: number, now: number) {
+  const diff = now - ts;
+  const min = 60 * 1000;
+  const hr = 60 * min;
+  const day = 24 * hr;
+  if (diff < min) return 'Just now';
+  if (diff < hr) return `${Math.floor(diff / min)}m ago`;
+  if (diff < day) return `${Math.floor(diff / hr)}h ago`;
+  if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
+  return new Date(ts).toLocaleDateString();
+}
 
   return (
     <div className="nx-dashboard">
@@ -102,7 +109,7 @@ export function Dashboard() {
                 ) : (
                   <div className="nx-board-card-name">{b.name}</div>
                 )}
-                <div className="nx-board-card-meta">{formatDate(b.updatedAt)}</div>
+                <div className="nx-board-card-meta">{formatDate(b.updatedAt, now)}</div>
               </Link>
               <div className="nx-board-card-actions">
                 <button

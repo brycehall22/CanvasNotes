@@ -12,7 +12,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useBoard } from '../store';
 import { useShallow } from 'zustand/react/shallow';
-import { screenToWorld } from './coords';
 import { NodeLayer } from './NodeLayer';
 import { EdgeLayer } from './EdgeLayer';
 import { OverlayLayer } from './OverlayLayer';
@@ -104,7 +103,7 @@ export function Stage() {
     // Default empty-canvas drag = pan (Miro/Figma feel).
     // Shift+drag = marquee selection. Alt/middle/pan-tool also force pan.
     const useMarquee = e.shiftKey && tool !== 'pan' && !e.altKey;
-    let mode: 'pan' | 'marquee' = useMarquee ? 'marquee' : 'pan';
+    const mode: 'pan' | 'marquee' = useMarquee ? 'marquee' : 'pan'
     let lastX = e.clientX;
     let lastY = e.clientY;
 
@@ -147,7 +146,7 @@ export function Stage() {
     };
 
     const onUp = (ev: PointerEvent) => {
-      try { el.releasePointerCapture(ev.pointerId); } catch {}
+      try { el.releasePointerCapture(ev.pointerId); } catch { /* already released */ }
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);
       el.removeEventListener('pointercancel', onUp);
@@ -351,14 +350,4 @@ export function Stage() {
       <OverlayLayer hostRef={hostRef} />
     </div>
   );
-}
-
-export function useScreenToWorld(hostRef: React.RefObject<HTMLElement>) {
-  return useCallback((clientX: number, clientY: number) => {
-    const host = hostRef.current;
-    const vp = useBoard.getState().viewport;
-    if (!host) return { x: 0, y: 0 };
-    const rect = host.getBoundingClientRect();
-    return screenToWorld(clientX - rect.left, clientY - rect.top, vp);
-  }, [hostRef]);
 }

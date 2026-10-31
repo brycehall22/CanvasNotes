@@ -1,6 +1,6 @@
 // Board search — find nodes by text and jump to them (⌘F).
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useBoard } from '../store';
 import { nodeSearchText, type CanvasNode } from '../types/domain';
 
@@ -38,18 +38,15 @@ function snippet(text: string, query: string, max = 80): string {
 }
 
 export function SearchPanel({ open, onClose, hostRef }: Props) {
+  if (!open) return null;
+  return <SearchPanelBody onClose={onClose} hostRef={hostRef} />;
+}
+
+function SearchPanelBody({ onClose, hostRef }: Omit<Props, 'open'>) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const nodes = useBoard((s) => s.nodes);
-
-  useEffect(() => {
-    if (open) {
-      setQuery('');
-      setActive(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open]);
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -90,6 +87,7 @@ export function SearchPanel({ open, onClose, hostRef }: Props) {
         </svg>
         <input
           ref={inputRef}
+          autoFocus
           className="nx-search-input"
           placeholder="Search notes, stickies, frames…"
           value={query}

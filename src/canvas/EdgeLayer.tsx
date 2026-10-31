@@ -15,7 +15,7 @@ import {
   ARROW_SIZE,
   type EdgeAnchors,
 } from '../edges/geometry';
-import type { CanvasNode, Edge } from '../types/domain';
+import type { CanvasNode } from '../types/domain';
 
 function scaleAnchors(a: EdgeAnchors, z: number): EdgeAnchors {
   return {
@@ -33,6 +33,9 @@ export const EdgeLayer = memo(function EdgeLayer() {
 
   const ghostRef = useRef<SVGPathElement>(null);
   const ghostHeadRef = useRef<SVGPathElement>(null);
+
+  const edgeKey = edgeIds.join(',');
+  const nodeKey = nodeIds.join(',');
 
   useEffect(() => {
     const update = () => {
@@ -140,7 +143,7 @@ export const EdgeLayer = memo(function EdgeLayer() {
       unsubZoom();
       unsubEdges();
     };
-  }, [edgeIds.join(','), nodeIds.join(',')]);
+  }, [edgeKey, nodeKey]);
 
   const edges = useBoard.getState().edges;
   const deleteEdge = useBoard((s) => s.deleteEdge);

@@ -10,6 +10,7 @@
 
 import { useRef, useState } from 'react';
 import { useBoard } from '../../store';
+import { safeHttpUrl } from '../../lib/safeUrl';
 
 interface Props { id: string; }
 
@@ -23,8 +24,8 @@ function extractDomain(url: string): string {
 }
 
 function openUrl(url: string) {
-  if (!url) return;
-  window.open(url, '_blank', 'noopener,noreferrer');
+  const safe = safeHttpUrl(url);
+  if (safe) window.open(safe, '_blank', 'noopener,noreferrer');
 }
 
 export function LinkNodeContent({ id }: Props) {
@@ -35,6 +36,7 @@ export function LinkNodeContent({ id }: Props) {
   const [input, setInput] = useState('');
 
   const downPos = useRef<{ x: number; y: number } | null>(null);
+  const wasSelected = useRef(false);
 
   if (!node || node.kind !== 'link') return null;
 
@@ -70,18 +72,17 @@ export function LinkNodeContent({ id }: Props) {
   const domain = extractDomain(node.url);
   const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=32` : '';
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    downPos.current = { x: e.clientX, y: e.clientY };
-  };
-  const onPointerUp = (e: React.PointerEvent) => {
-    if (!downPos.current) return;
-    const dx = e.clientX - downPos.current.x;
-    const dy = e.clientY - downPos.current.y;
-    downPos.current = null;
-    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) {
-      openUrl(node.url);
-    }
-  };
+const onPointerDown = (e: React.PointerEvent) => {
+  downPos.current = { x: e.clientX, y: e.clientY };
+  wasSelected.current = useBoard.getState().selectedIds.has(id);
+};
+const onPointerUp = (e: React.PointerEvent) => {
+  if (!downPos.current) return;
+  const dx = e.clientX - downPos.current.x;
+  const dy = e.clientY - downPos.current.y;
+  downPos.current = null;
+  if (wasSelected.current && Math.abs(dx) < 4 && Math.abs(dy) < 4) openUrl(node.url);
+};
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();

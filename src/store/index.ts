@@ -21,9 +21,10 @@ import { immer } from 'zustand/middleware/immer';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { enableMapSet } from 'immer';
 import { nanoid } from 'nanoid';
-import type { CanvasNode, Edge, Viewport, NodeKind, NodeColor, ShapeType, EdgeArrow, EdgePath } from '../types/domain';
-import { SHAPE_TYPES, nodeTitle } from '../types/domain';
+import type { CanvasNode, Edge, Viewport, NodeKind, NodeColor, ShapeType } from '../types/domain';
+import { FRAME_TITLE_HEIGHT } from '../types/domain';
 import { zoomedAt, fitBounds } from '../canvas/coords';
+import { safeHttpUrl } from '../lib/safeUrl';
 
 enableMapSet();
 
@@ -99,10 +100,6 @@ interface BoardState {
   // -- Shape helpers --
   setSelectionShape: (shape: ShapeType) => void;
   toggleFrameCollapse: (id: string) => void;
-  /** Resolve a wiki title to a node id (exact title match, case-insensitive) */
-  findNodeByTitle: (title: string) => string | null;
-  /** Ensure a wiki edge from → to exists */
-  ensureWikiEdge: (fromId: string, toId: string) => void;
 
   // -- Clipboard / duplicate --
   duplicateSelection: () => void;
@@ -228,7 +225,9 @@ export const useBoard = create<BoardState>()(
         s.boardId = boardId;
         s.nodes = {};
         s.edges = {};
-        for (const n of data.nodes) s.nodes[n.id] = n;
+        for (const n of data.nodes) {
+	        s.nodes[n.id] = n.kind === 'frame' ? { ...n, zIndex: -1 } : n;
+        }
         for (const e of data.edges) s.edges[e.id] = e;
         s.edgesByNode = rebuildIndex(s.edges);
         s.viewport = data.viewport;
@@ -360,7 +359,7 @@ export const useBoard = create<BoardState>()(
           let next = maxZ + 1;
           for (const id of ids) {
             const n = s.nodes[id];
-            if (n) {
+            if (n && n.kind !== 'frame') {
               n.zIndex = next++;
               n.updatedAt = Date.now();
             }
@@ -430,6 +429,26 @@ export const useBoard = create<BoardState>()(
           y: screenH / 2 - cy * z,
         };
       }),
+
+      toggleFrameCollapse: (id) => {
+        const n = get().nodes[id];
+        if (!n || n.kind !== 'frame') return;
+        get().commit();
+        set((s) => {
+          const f = s.nodes[id];
+          if (!f || f.kind !== 'frame') return;
+          if (f.collapsed) {
+            f.height = f.expandedHeight ?? f.height;
+            f.collapsed = false;
+            delete f.expandedHeight;
+          } else {
+            f.expandedHeight = f.height;
+            f.height = FRAME_TITLE_HEIGHT;
+            f.collapsed = true;
+          }
+          f.updatedAt = Date.now();
+        });
+      },
 
       // updateNode is used for text typing too — we DON'T commit here either.
       // Text nodes can produce 100+ keystrokes per "edit session"; each one
@@ -592,6 +611,8 @@ export const useBoard = create<BoardState>()(
               to: newTo,
               label: e.label,
               style: e.style,
+              arrow: e.arrow,
+              path: e.path,
             };
           }
           draft.edgesByNode = rebuildIndex(draft.edges);
@@ -644,6 +665,8 @@ export const useBoard = create<BoardState>()(
               to: newTo,
               label: e.label,
               style: e.style,
+              arrow: e.arrow,
+              path: e.path,
             };
           }
           draft.edgesByNode = rebuildIndex(draft.edges);
@@ -690,7 +713,7 @@ export const useBoard = create<BoardState>()(
         if (s.editingNodeId && s.editingNodeId !== id) s.editingNodeId = null;
         // Bring selected node to front so it isn't buried under neighbors
         const n = s.nodes[id];
-        if (n) {
+        if (n && n.kind !== 'frame') {
           let maxZ = 0;
           for (const other of Object.values(s.nodes)) {
             if (other.zIndex > maxZ) maxZ = other.zIndex;
@@ -788,6 +811,49 @@ export async function copySelection(): Promise<void> {
   }
 }
 
+const NODE_KINDS = new Set(['text','sticky','todo','shape','frame','image','video','link']);
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const isStr = (v: unknown): v is string => typeof v === 'string';
+
+export function sanitizePayload(raw: unknown): ClipboardPayload | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const p = raw as Record<string, unknown>;
+  if (p.kind !== 'nexuscanvas:v1' || !Array.isArray(p.nodes) || !Array.isArray(p.edges)) return null;
+  if (p.nodes.length > 2000 || p.edges.length > 5000) return null;
+
+  const nodes: CanvasNode[] = [];
+  for (const item of p.nodes) {
+    if (!item || typeof item !== 'object') return null;
+    const o = item as Record<string, unknown>;
+    if (!isStr(o.id) || !isStr(o.kind) || !NODE_KINDS.has(o.kind)) return null;
+    if (![o.x, o.y, o.width, o.height].every(isNum)) return null;
+    const n = { ...o, zIndex: isNum(o.zIndex) ? o.zIndex : 0 } as unknown as CanvasNode;
+    switch (n.kind) {
+      case 'text':   if (!isStr(n.markdown)) return null; break;
+      case 'sticky':
+      case 'shape':  if (!isStr(n.text)) return null; break;
+      case 'frame':  if (!isStr(n.title)) return null; break;
+      case 'todo':
+        if (!isStr(n.title) || !Array.isArray(n.items)) return null;
+        n.items = n.items.filter((i) => i && isStr(i.id) && isStr(i.text)).map((i) => ({ id: i.id, text: i.text, done: !!i.done }));
+        break;
+      case 'link':   n.url = safeHttpUrl(isStr(n.url) ? n.url : '') ?? ''; break;
+      case 'video':
+        if ((n.provider !== 'youtube' && n.provider !== 'vimeo') || !/^[A-Za-z0-9_-]{0,32}$/.test(String(n.videoId))) return null;
+        break;
+      case 'image':  if (!isStr(n.assetId)) return null; break;
+    }
+    nodes.push(n);
+  }
+  const edges: Edge[] = [];
+  for (const item of p.edges) {
+    const e = item as Record<string, unknown> | null;
+    if (!e || !isStr(e.from) || !isStr(e.to)) return null;
+    edges.push(e as unknown as Edge);
+  }
+  return { kind: 'nexuscanvas:v1', nodes, edges, originX: isNum(p.originX) ? p.originX : 0, originY: isNum(p.originY) ? p.originY : 0 };
+}
+
 /**
  * Try to read a clipboard payload. First checks the system clipboard,
  * then falls back to sessionStorage.
@@ -797,7 +863,7 @@ export async function readClipboardPayload(): Promise<ClipboardPayload | null> {
   try {
     const text = await navigator.clipboard.readText();
     const parsed = JSON.parse(text);
-    if (parsed?.kind === 'nexuscanvas:v1') return parsed as ClipboardPayload;
+    if (parsed?.kind === 'nexuscanvas:v1') return sanitizePayload(parsed);
   } catch {
     // ignore — fall through to session storage
   }
@@ -806,7 +872,7 @@ export async function readClipboardPayload(): Promise<ClipboardPayload | null> {
   if (!text) return null;
   try {
     const parsed = JSON.parse(text);
-    if (parsed?.kind === 'nexuscanvas:v1') return parsed as ClipboardPayload;
+    if (parsed?.kind === 'nexuscanvas:v1') return sanitizePayload(parsed);
   } catch {
     // ignore
   }

@@ -145,6 +145,8 @@ export interface Board {
   updatedAt: number;
 }
 
+export const FRAME_TITLE_HEIGHT = 44;
+
 export function nodeSearchText(n: CanvasNode): string {
   switch (n.kind) {
     case 'text':

@@ -2,7 +2,7 @@
 // Loads a board's contents from IndexedDB, mounts the Stage, enables auto-save.
 
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Stage } from '../canvas/Stage';
 import { Toolbar } from '../ui/Toolbar';
 import { SelectionBar } from '../ui/SelectionBar';
@@ -16,7 +16,6 @@ import type { Board as BoardType } from '../types/domain';
 
 export function Board() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const [meta, setMeta] = useState<BoardType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);

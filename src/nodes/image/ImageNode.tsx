@@ -12,48 +12,44 @@ const MAX_H = 280;
 export function ImageNodeContent({ id }: Props) {
   const node = useBoard((s) => s.nodes[id]);
   const updateNode = useBoard((s) => s.updateNode);
-  const [url, setUrl] = useState<string | null>(null);
   const [draggingFile, setDraggingFile] = useState(false);
+  const assetId = node && node.kind === 'image' ? node.assetId : '';
+  const [loaded, setLoaded] = useState<{ id: string; url: string | null } | null>(null);
 
   useEffect(() => {
+    if (!assetId) return;
     let cancelled = false;
-    if (node && node.kind === 'image' && node.assetId) {
-      getImageUrl(node.assetId).then((u) => { if (!cancelled) setUrl(u); });
-    } else {
-      setUrl(null);
-    }
+    getImageUrl(assetId).then((u) => {
+      if (!cancelled) setLoaded({ id: assetId, url: u });
+    });
     return () => { cancelled = true; };
-  }, [node]);
+  }, [assetId]);
 
-  // Auto-fit node to image aspect once the bitmap is known
-  useEffect(() => {
-    if (!url || !node || node.kind !== 'image') return;
-    const img = new Image();
-    img.onload = () => {
-      const nw = img.naturalWidth || 1;
-      const nh = img.naturalHeight || 1;
-      const scale = Math.min(MAX_W / nw, MAX_H / nh, 1);
-      const w = Math.max(120, Math.round(nw * scale));
-      const h = Math.max(80, Math.round(nh * scale));
-      const cur = useBoard.getState().nodes[id];
-      if (!cur || cur.kind !== 'image') return;
-      // Only resize when still near default placeholder size or aspect is way off
-      const aspect = w / h;
-      const curAspect = cur.width / Math.max(cur.height, 1);
-      if (
-        Math.abs(cur.width - 240) < 8 && Math.abs(cur.height - 180) < 8 ||
-        Math.abs(aspect - curAspect) > 0.15
-      ) {
-        useBoard.getState().updateNode(id, { width: w, height: h });
-      }
-    };
-    img.src = url;
-  }, [url, id]);
+  const url = assetId && loaded?.id === assetId ? loaded.url : null;
+
+  function measureImage(file: File): Promise<{ w: number; h: number }> {
+    return new Promise((resolve, reject) => {
+      const src = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(src); resolve({ w: img.naturalWidth || 1, h: img.naturalHeight || 1 }); };
+      img.onerror = () => { URL.revokeObjectURL(src); reject(new Error('decode failed')); };
+      img.src = src;
+    });
+  }   // define at module level
 
   const handleFile = async (file: File) => {
     if (!file.type.startsWith('image/')) return;
-    const assetId = await storeImageBlob(file);
-    updateNode(id, { assetId, alt: file.name });
+    let size = { w: 240, h: 180 };
+    try { size = await measureImage(file); } catch { /* keep default box */ }
+    const newAssetId = await storeImageBlob(file);
+    const scale = Math.min(MAX_W / size.w, MAX_H / size.h, 1);
+    useBoard.getState().commit();
+    updateNode(id, {
+      assetId: newAssetId,
+      alt: file.name,
+      width: Math.max(120, Math.round(size.w * scale)),
+      height: Math.max(80, Math.round(size.h * scale)),
+    });
   };
 
   const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {

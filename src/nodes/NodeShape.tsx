@@ -91,45 +91,46 @@ export const NodeShape = memo(function NodeShape({ id, hostRef }: Props) {
 
     const startX = e.clientX;
     const startY = e.clientY;
+    const pointerId = e.pointerId;
+    const el = e.currentTarget;
     let lastDx = 0;
     let lastDy = 0;
     let moved = false;
 
-    const el = e.currentTarget;
-    el.setPointerCapture(e.pointerId);
-
     const onMove = (ev: PointerEvent) => {
-      const z = useBoard.getState().viewport.zoom;
-      const dx = (ev.clientX - startX) / z;
-      const dy = (ev.clientY - startY) / z;
-      if (!moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      if (ev.pointerId !== pointerId) return;
+      const sdx = ev.clientX - startX;
+      const sdy = ev.clientY - startY;
+      if (!moved) {
+        if (Math.hypot(sdx, sdy) <= 3) return;   // screen px, independent of zoom
         moved = true;
         useBoard.getState().commit();
-        ev.preventDefault();
+        try { el.setPointerCapture(pointerId); } catch { /* node unmounted */ }
         setDraggingVisual(true);
       }
-      if (moved) {
-        const stepX = dx - lastDx;
-        const stepY = dy - lastDy;
-        lastDx = dx;
-        lastDy = dy;
-        if (stepX !== 0 || stepY !== 0) {
-          useBoard.getState().moveNodesBy(dragIds, stepX, stepY);
-        }
-      }
+      ev.preventDefault();
+      const z = useBoard.getState().viewport.zoom;
+      const dx = sdx / z;
+      const dy = sdy / z;
+      const stepX = dx - lastDx;
+      const stepY = dy - lastDy;
+      lastDx = dx;
+      lastDy = dy;
+      if (stepX !== 0 || stepY !== 0) useBoard.getState().moveNodesBy(dragIds, stepX, stepY);
     };
 
     const onUp = (ev: PointerEvent) => {
-      try { el.releasePointerCapture(ev.pointerId); } catch { /* */ }
-      el.removeEventListener('pointermove', onMove);
-      el.removeEventListener('pointerup', onUp);
-      el.removeEventListener('pointercancel', onUp);
+      if (ev.pointerId !== pointerId) return;
+      if (moved) { try { el.releasePointerCapture(pointerId); } catch { /* */ } }
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
       setDraggingVisual(false);
     };
 
-    el.addEventListener('pointermove', onMove);
-    el.addEventListener('pointerup', onUp);
-    el.addEventListener('pointercancel', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   }, [id]);
 
   const onDoubleClick = useCallback((e: React.MouseEvent) => {
@@ -298,11 +299,9 @@ export const NodeShape = memo(function NodeShape({ id, hostRef }: Props) {
           aria-label="Connection port"
         />
       )}
-      <div
-        className="nx-resize"
-        onPointerDown={onResizePointerDown}
-        aria-label="Resize"
-      />
+      {!frameCollapsed && (
+        <div className="nx-resize" onPointerDown={onResizePointerDown} aria-label="Resize" />
+      )}
     </div>
   );
 });

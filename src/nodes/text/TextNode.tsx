@@ -42,11 +42,18 @@ export function TextNodeContent({ id }: Props) {
     );
   }
 
-  return (
-    <div className="nx-text-read">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {node.markdown}
-      </ReactMarkdown>
-    </div>
-  );
+return (
+  <div className="nx-text-read">
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+        ),
+      }}
+    >
+      {node.markdown}
+    </ReactMarkdown>
+  </div>
+);
 }
