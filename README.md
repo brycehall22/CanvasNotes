@@ -4,7 +4,6 @@ Infinite spatial note board with wiki-links, frames, diagram shapes, and media.
 
 ## Highlights (v0.6)
 
-- **[[Wiki-links]]** — type `[[` in a note to link nodes; auto-creates edges; backlinks footer
 - **Frames** — collapse (▾) or auto title-only when zoomed out
 - **Minimap** — bottom-right pill, expand for overview / click-to-pan
 - **Image autofit** — photo nodes match image aspect ratio
